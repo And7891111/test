@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>合成雾生成器</title>
+  <style>
+    html,body{height:100%;margin:0;display:flex;align-items:center;justify-content:center;background:#111}
+    .ui{position:fixed;left:12px;top:12px;z-index:20;color:#fff;font-family:Segoe UI,Roboto,Arial}
+    button{margin-right:8px;padding:8px 12px;border-radius:6px;border:none;background:#2b2b2b;color:#fff;cursor:pointer}
+    #canvas{max-width:100%;height:auto;box-shadow:0 8px 30px rgba(0,0,0,.6);border-radius:6px}
+  </style>
+</head>
+<body>
+  <div class="ui">
+    <button id="gen">生成</button>
+    <button id="download">下载 PNG</button>
+    <label style="margin-left:12px">分辨率:</label>
+    <select id="res">
+      <option value="1024x682">1024×682</option>
+      <option value="1920x1080">1920×1080</option>
+      <option value="2048x1365" selected>2048×1365</option>
+    </select>
+  </div>
+  <canvas id="canvas" width="2048" height="1365"></canvas>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const genBtn = document.getElementById('gen');
+    const dlBtn = document.getElementById('download');
+    const resSel = document.getElementById('res');
+
+    function setSize(w,h){canvas.width=w;canvas.height=h}
+
+    function rand(min,max){return Math.random()*(max-min)+min}
+
+    function drawBackground(){
+      const g = ctx.createLinearGradient(0,0,0,canvas.height);
+      g.addColorStop(0,'#9fbfdc');
+      g.addColorStop(0.5,'#b9cfe0');
+      g.addColorStop(1,'#cfd8df');
+      ctx.fillStyle = g; ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+
+    function drawMountains(){
+      const layers = 4;
+      for(let i=0;i<layers;i++){
+        const t = i/(layers-1);
+        const h = canvas.height*(0.2 + 0.6*(1-t));
+        ctx.save();
+        ctx.translate(0, canvas.height*0.4 + i*40);
+        ctx.beginPath();
+        ctx.moveTo(0,canvas.height);
+        let x=0;
+        while(x<=canvas.width){
+          const peak = rand(-120,120) * (1-t);
+          const y = Math.sin((x/(canvas.width))*Math.PI*2 + i*0.5) * (50*(1-t)) + peak;
+          ctx.lineTo(x, y + (i*30));
+          x += rand(60,160);
+        }
+        ctx.lineTo(canvas.width, canvas.height);
+        ctx.closePath();
+        const gray = Math.floor(60 + 40*(1-t));
+        ctx.fillStyle = `rgba(${gray},${gray},${gray},${0.35})`;
+        ctx.filter = `blur(${10 + i*6}px)`;
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.filter = 'none';
+    }
+
+    function generateNoiseLayer(alpha, blur, scale){
+      const off = document.createElement('canvas');
+      off.width = canvas.width; off.height = canvas.height;
+      const octx = off.getContext('2d');
+      const img = octx.createImageData(off.width, off.height);
+      const data = img.data;
+      for(let i=0;i<data.length;i+=4){
+        const v = Math.floor(200 + (Math.random()-0.5)*80);
+        data[i]=data[i+1]=data[i+2]=v;
+        data[i+3]=255;
+      }
+      octx.putImageData(img,0,0);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.filter = `blur(${blur}px)`;
+      ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      ctx.filter='none';
+    }
+
+    function addFog(){
+      generateNoiseLayer(0.22, 40, 1);
+      generateNoiseLayer(0.18, 80, 1);
+      ctx.globalCompositeOperation = 'soft-light';
+      generateNoiseLayer(0.06, 160, 1);
+      ctx.globalCompositeOperation = 'source-over';
+      const grd = ctx.createLinearGradient(0,canvas.height*0.1,0,canvas.height);
+      grd.addColorStop(0,'rgba(255,255,255,0.06)');
+      grd.addColorStop(1,'rgba(255,255,255,0.14)');
+      ctx.fillStyle = grd; ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+
+    function addForegroundHints(){
+      ctx.save();
+      ctx.translate(0, canvas.height*0.6);
+      for(let i=0;i<12;i++){
+        const x = rand(-100, canvas.width+100);
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.quadraticCurveTo(x+rand(-40,40), rand(-60,-10), x+rand(-20,20), rand(-160,-80));
+        ctx.lineWidth = rand(1,2);
+        ctx.strokeStyle = `rgba(30,30,30,${0.35})`;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function generate(){
+      drawBackground();
+      drawMountains();
+      addFog();
+      addForegroundHints();
+    }
+
+    genBtn.addEventListener('click',()=>{
+      const [w,h] = resSel.value.split('x').map(Number);
+      setSize(w,h);
+      generate();
+    });
+
+    dlBtn.addEventListener('click',()=>{
+      const link = document.createElement('a');
+      link.download = 'synthetic_fog.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+
+    window.addEventListener('load',()=>{generate();});
+  </script>
+</body>
+</html>
